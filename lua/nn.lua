@@ -1,129 +1,184 @@
 require("math")
 math.randomseed(os.time())
 
-local INPUTS = 2
-local HIDDEN_NODES = 2
-local OUTPUTS = 1
-local TRAINING = 4
+local inputs = 2
+local hiddenNodes = 2
+local outputs = 1
+local training = 4
 
-local function initWeight() -- random weight initialization
-	return math.random()
+local function initWeight()
+	return (math.random() * 2) - 1 -- random float b/w 1, -1
 end
 
-print("random weight", init())
-
-local function sigmoid(x) -- sigmoid function
-	return (1 / (1 + math.exp(-x)))
+local function sigmoid(x)
+	return 1 / (1 + math.exp(-x))
 end
 
-local function derivative(x) -- signoid derivative
-	return (x * (1 - x))
+local function derivative(x)
+	return x * (1 - x)
 end
 
-local function shuffle(table) -- shuffle data
-	for i = #table, 2, -1 do
+local function shuffle(t)
+	for i = #t, 2, -1 do
 		local j = math.random(1, i)
-		table[i], table[j] = table[j], table[i]
+		t[i], t[j] = t[j], t[i]
 	end
 end
 
-local function initModel() -- main function
-	local rate = 0.1
+local function initModel() --initializing table of model vars
+	local model = {
 
-	local hiddenLayer = {}
-	local outputLayer = {}
+		rate = 0.1,
+		hiddenLayer = {},
+		outputLayer = {},
 
-	local hiddenLayerBias = {}
-	local outputLayerBias = {}
+		hiddenLayerBias = {},
+		outputLayerBias = {},
 
-	local hiddenWeights = {} -- 2D
-	local outputWeights = {} -- 2D
+		hiddenWeights = {},
+		outputWeights = {},
 
-	for i = 1, HIDDEN_NODES do
-		hiddenLayer[i] = nil
-		hiddenLayerBias[i] = nil
+		trainingSetOrder = { 1, 2, 3, 4 },
+		numberOfEpochs = 10000,
+
+		trainingInputs = {
+			{ 0.0, 0.0 },
+			{ 1.0, 0.0 },
+			{ 0.0, 1.0 },
+			{ 1.0, 1.0 },
+		},
+
+		trainingOutputs = {
+			{ 0.0 },
+			{ 1.0 },
+			{ 1.0 },
+			{ 0.0 },
+		},
+	}
+
+	for i = 1, hiddenNodes do
+		model.hiddenLayer[i] = 0
+		model.hiddenLayerBias[i] = initWeight()
 	end
 
-	for i = 1, OUTPUTS do
-		outputLayer[i] = nil
-		outputLayerBias[i] = nil
+	for i = 1, outputs do
+		model.outputLayer[i] = 0
+		model.outputLayerBias[i] = initWeight()
 	end
 
-	for i = 1, INPUTS do
-		hiddenWeights[i] = {}
-		for j = 1, HIDDEN_NODES do
-			hiddenWeights[i][j] = nil
+	for i = 1, inputs do
+		model.hiddenWeights[i] = {}
+		for j = 1, hiddenNodes do
+			model.hiddenWeights[i][j] = initWeight()
 		end
 	end
 
-	for i = 1, HIDDEN_NODES do
-		outputWeights[i] = {}
-		for j = 1, OUTPUTS do
-			outputWeights[i][j] = nil -- 2D array
+	for i = 1, hiddenNodes do
+		model.outputWeights[i] = {}
+		for j = 1, outputs do
+			model.outputWeights[i][j] = initWeight()
 		end
 	end
 
-	-- training input/ output data (hard coded for now)
-
-	local trainingInputs = { { 0.0, 0.0 }, { 1.0, 0.0 }, { 0.0, 1.0 }, { 1.0, 1.0 } }
-
-	local trainingOutputs = { { 0.0 }, { 1.0 }, { 1.0 }, { 0.0 } }
-
-	for i = 0, INPUTS - 1 do
-		for j = 1, HIDDEN_NODES - 1 do
-			hiddenWeights[i][j] = initWeight() -- initialize random input weights
-		end
-	end
-
-	for i = 0, HIDDEN_NODES - 1 do
-		for j = 1, OUTPUTS - 1 do
-			outputWeights[i][j] = initWeight() -- initialize random output weights
-		end
-	end
-
-	for i = 0, OUTPUTS - 1 do -- output layer bias
-		outputLayerBias[i] = initWeight()
-	end
-
-	local trainingSetOrder = { 0, 1, 2, 3 }
-	local numberOfEpochs = 10000
+	return model
 end
 
-local function hiddenLayerActivation(trainingSetOrder, trainingInputs, hiddenLayer, hiddenLayerBias)
-	for x = 1, #trainingSetOrder do
-		local i = trainingSetOrder[x]
+local function compute()
+	local model = initModel()
 
-		-- Hidden layer activation computation
-		for j = 1, #HIDDEN_NODES do
-			local activation = hiddenLayerBias[j]
+	for epoch = 1, model.numberOfEpochs do
+		if epoch % 1000 == 0 then
+			print(epoch, "simulations completed")
+		end
+		shuffle(model.trainingSetOrder) -- shuffling the order
 
-			for k = 1, #trainingInputs[i] do
-				activation = activation + trainingInputs[i][k]
+		for x = 1, #model.trainingSetOrder do
+			local i = model.trainingSetOrder[x]
+
+			-- forward pass: compute hidden layer
+			for j = 1, hiddenNodes do
+				local activation = model.hiddenLayerBias[j]
+				for k = 1, inputs do
+					activation = activation + model.trainingInputs[i][k] * model.hiddenWeights[k][j]
+				end
+				model.hiddenLayer[j] = sigmoid(activation)
 			end
 
-			hiddenLayer[j] = sigmoid(activation)
+			-- forward pass:
+			-- compute output layer
+			for j = 1, outputs do
+				local activation = model.outputLayerBias[j]
+				for k = 1, hiddenNodes do
+					activation = activation + model.hiddenLayer[k] * model.outputWeights[k][j]
+				end
+				model.outputLayer[j] = sigmoid(activation)
+			end
+
+			-- backward pass:
+			-- compute delta for output layer
+			local deltaOutput = {}
+			for j = 1, outputs do
+				local error = model.trainingOutputs[i][j] - model.outputLayer[j]
+				deltaOutput[j] = error * derivative(model.outputLayer[j])
+			end
+
+			-- backward pass:
+			-- compute delta for hidden layer
+			local deltaHidden = {}
+			for j = 1, hiddenNodes do
+				local error = 0.0
+				for k = 1, outputs do
+					error = error + deltaOutput[k] * model.outputWeights[j][k]
+				end
+				deltaHidden[j] = error * derivative(model.hiddenLayer[j])
+			end
+
+			for j = 1, outputs do -- update output weights and biases
+				model.outputLayerBias[j] = model.outputLayerBias[j] + deltaOutput[j] * model.rate
+				for k = 1, hiddenNodes do
+					model.outputWeights[k][j] = model.outputWeights[k][j]
+						+ model.hiddenLayer[k] * deltaOutput[j] * model.rate
+				end
+			end
+
+			for j = 1, hiddenNodes do -- update hidden weights and biases
+				model.hiddenLayerBias[j] = model.hiddenLayerBias[j] + deltaHidden[j] * model.rate
+				for k = 1, inputs do
+					model.hiddenWeights[k][j] = model.hiddenWeights[k][j]
+						+ model.trainingInputs[i][k] * deltaHidden[j] * model.rate
+				end
+			end
 		end
+	end
+
+	-- final predictions
+	for i = 1, training do
+		-- forward pass
+		for j = 1, hiddenNodes do
+			local activation = model.hiddenLayerBias[j]
+			for k = 1, inputs do
+				activation = activation + model.trainingInputs[i][k] * model.hiddenWeights[k][j]
+			end
+			model.hiddenLayer[j] = sigmoid(activation)
+		end
+
+		for j = 1, outputs do
+			local activation = model.outputLayerBias[j]
+			for k = 1, hiddenNodes do
+				activation = activation + model.hiddenLayer[k] * model.outputWeights[k][j]
+			end
+			model.outputLayer[j] = sigmoid(activation)
+		end
+		print(
+			string.format(
+				"input: %f %f | target: %f | predicted: %f",
+				model.trainingInputs[i][1],
+				model.trainingInputs[i][2],
+				model.trainingOutputs[i][1],
+				model.outputLayer[1]
+			)
+		)
 	end
 end
 
-local function outputLayerActivation(trainingSetOrder, trainingInputs, outputLayer, outputLayerBias, outputWeights)
-	for j = 1, #OUTPUTS do
-		activation = outputLayerBias[j]
-
-		for k = 1, #HIDDEN_NODES do
-			activation = outputLayer[k] * outputWeights[k][j]
-		end
-		outputLayer[j] = sigmoid(activation)
-	end
-end
-
-local function epochRepresent(numberOfEpochs, trainingSetOrder)
-	for epoch = 0, #numberOfEpochs do
-		shuffle(trainingSetOrder)
-		for x = 1, #trainingSetOrder do
-			local i = trainingSetOrder[x]
-			hiddenLayerActivation()
-			outputLayerActivation()
-		end
-	end
-end
+compute()
